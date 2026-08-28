@@ -55,7 +55,14 @@ export async function findProfilesByUsername(username: string, userId: number) {
 
 export async function getRequestsForRecipient(recipientId: number) {
   const db = await getDb(); if (!db) return [];
-  return db.select().from(messageRequests).where(and(eq(messageRequests.recipientId, recipientId), eq(messageRequests.status, "pending"))).orderBy(desc(messageRequests.createdAt));
+  const requests = await db.select().from(messageRequests).where(and(eq(messageRequests.recipientId, recipientId), eq(messageRequests.status, "pending"))).orderBy(desc(messageRequests.createdAt));
+  // Enrich with sender profile data
+  const enriched: Array<typeof requests[number] & { senderProfile?: Awaited<ReturnType<typeof getProfileByUserId>> }> = [];
+  for (const req of requests) {
+    const senderProfile = await getProfileByUserId(req.senderId);
+    enriched.push({ ...req, senderProfile });
+  }
+  return enriched;
 }
 
 export async function getRequestsForSender(senderId: number) {
