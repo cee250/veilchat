@@ -43,7 +43,7 @@ export default function Home() {
   const [section, setSection] = useState<"messages" | "requests" | "settings">("messages");
   const [search, setSearch] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
-  const [profileForm, setProfileForm] = useState({ countryCode: "+1", phoneE164: "", displayName: "", username: "", avatarUrl: "" });
+  const [profileForm, setProfileForm] = useState({ countryCode: "+1", phoneE164: "", displayName: "", username: "", avatarUrl: "", allowDiscovery: true });
   const [requestNotice, setRequestNotice] = useState<string | null>(null);
   const [discoveryResult, setDiscoveryResult] = useState<{ found: boolean; displayName?: string; avatarUrl?: string; userId?: number } | null>(null);
   const discoveryQuery = trpc.discovery.byUsername.useQuery({ username: search.replace("@", "") }, { enabled: isAuthenticated && search.length >= 3, retry: false });
