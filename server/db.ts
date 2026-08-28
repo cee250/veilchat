@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, conversations, messageRequests, messages, profiles, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -46,7 +46,7 @@ export async function getProfileByUserId(userId: number) {
   return result[0];
 }
 
-export async function findProfilesByUsername(username: string, userId: number) {
+export async function findProfilesByUsername(username: string) {
   const db = await getDb(); if (!db) return [];
   // Search by username prefix for better UX, require allowDiscovery=true, no phone number requirement
   return db.select({ id: profiles.id, userId: profiles.userId, username: profiles.username, displayName: profiles.displayName, avatarUrl: profiles.avatarUrl })
@@ -72,7 +72,39 @@ export async function getRequestsForSender(senderId: number) {
 
 export async function getConversationsForUser(userId: number) {
   const db = await getDb(); if (!db) return [];
-  return db.select().from(conversations).where(or(eq(conversations.participantAId, userId), eq(conversations.participantBId, userId))).orderBy(desc(conversations.updatedAt));
+  const rows = await db.select().from(conversations)
+    .where(or(eq(conversations.participantAId, userId), eq(conversations.participantBId, userId)))
+    .orderBy(desc(conversations.updatedAt));
+  return Promise.all(rows.map(async (conversation) => {
+    const peerId = conversation.participantAId === userId ? conversation.participantBId : conversation.participantAId;
+    const peer = await getProfileByUserId(peerId);
+    return {
+      ...conversation,
+      peer: peer ? {
+        userId: peer.userId,
+        username: peer.username,
+        displayName: peer.displayName,
+        avatarUrl: peer.avatarUrl,
+      } : null,
+    };
+  }));
+}
+
+export async function deleteUserAccount(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.transaction(async (tx) => {
+    const userConversations = await tx.select({ id: conversations.id }).from(conversations)
+      .where(or(eq(conversations.participantAId, userId), eq(conversations.participantBId, userId)));
+    const conversationIds = userConversations.map((conversation) => conversation.id);
+    if (conversationIds.length) {
+      await tx.delete(messages).where(inArray(messages.conversationId, conversationIds));
+    }
+    await tx.delete(messageRequests).where(or(eq(messageRequests.senderId, userId), eq(messageRequests.recipientId, userId)));
+    await tx.delete(conversations).where(or(eq(conversations.participantAId, userId), eq(conversations.participantBId, userId)));
+    await tx.delete(profiles).where(eq(profiles.userId, userId));
+    await tx.delete(users).where(eq(users.id, userId));
+  });
 }
 
 export async function getMessagesForConversation(conversationId: number, userId: number) {

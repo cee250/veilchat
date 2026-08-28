@@ -6,7 +6,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { conversations, messageRequests, messages, profiles } from "../drizzle/schema";
-import { getConversationsForUser, getDb, getMessagesForConversation, getProfileByUserId, getRequestsForRecipient, getRequestsForSender, findProfilesByUsername } from "./db";
+import { getConversationsForUser, getDb, getMessagesForConversation, getProfileByUserId, getRequestsForRecipient, getRequestsForSender, findProfilesByUsername, deleteUserAccount } from "./db";
 
 const usernameSchema = z.string().min(3).max(32).regex(/^[a-z0-9_]+$/);
 
@@ -15,6 +15,14 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+  }),
+  account: router({
+    delete: protectedProcedure.mutation(async ({ ctx }) => {
+      await deleteUserAccount(ctx.user.id);
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
@@ -34,7 +42,7 @@ export const appRouter = router({
     }),
   }),
   discovery: router({
-    byUsername: protectedProcedure.input(z.object({ username: usernameSchema })).query(({ ctx, input }) => findProfilesByUsername(input.username, ctx.user.id)),
+    byUsername: publicProcedure.input(z.object({ username: usernameSchema })).query(({ input }) => findProfilesByUsername(input.username)),
   }),
   requests: router({
     incoming: protectedProcedure.query(({ ctx }) => getRequestsForRecipient(ctx.user.id)),
