@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Space Grotesk", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "DM Mono", monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --radius: 0.75rem;
+  --background: oklch(0.105 0.015 250);
+  --foreground: oklch(0.94 0.015 220);
+  --card: oklch(0.15 0.02 250);
+  --card-foreground: oklch(0.94 0.015 220);
+  --popover: oklch(0.16 0.02 250);
+  --popover-foreground: oklch(0.94 0.015 220);
+  --primary: oklch(0.88 0.14 190);
+  --primary-foreground: oklch(0.16 0.03 220);
+  --secondary: oklch(0.2 0.025 250);
+  --secondary-foreground: oklch(0.88 0.02 220);
+  --muted: oklch(0.2 0.02 250);
+  --muted-foreground: oklch(0.56 0.025 230);
+  --accent: oklch(0.22 0.03 250);
+  --accent-foreground: oklch(0.94 0.015 220);
+  --destructive: oklch(0.65 0.2 20);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.82 0.14 190);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { min-height: 100%; }
+body { margin: 0; background: #070a0f; color: #edf6fb; font-family: "Space Grotesk", sans-serif; }
+button, input, textarea { font-family: inherit; }
+.font-display { font-family: "Space Grotesk", sans-serif; }
+.font-mono { font-family: "DM Mono", monospace; }
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), [type="submit"]:not(:disabled), a[href] { @apply cursor-pointer; }
+  button { transition: transform 160ms cubic-bezier(.23,1,.32,1), background-color 160ms ease, color 160ms ease; }
+  button:active:not(:disabled) { transform: scale(.97); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* Stealth workspace presentation: visual concealment only, not network or data concealment. */
+.stealth-mode { background: #07100c !important; color: #b7f7c2 !important; font-family: "JetBrains Mono", "IBM Plex Mono", monospace; }
+.stealth-mode .bg-\[\#0b0f16\] { background: #0b1410 !important; }
+.stealth-mode .text-cyan-300, .stealth-mode .text-cyan-200 { color: #8ef0a0 !important; }

@@ -1,0 +1,38 @@
+services:
+  # Backend Service (Node.js + WebSocket + Database)
+  - type: web
+    name: veilchat-server
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd server && npm install && cd ../shared && npm install && cd ../client && npm install && npm run build
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        generateValue: true
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+        sync: false
+      - key: PORT
+        value: 3001
+      - key: CORS_ORIGIN
+        value: https://veilchat-server.onrender.com
+      - key: FRONTEND_URL
+        value: https://veilchat.netlify.app
+
+  # Frontend Service (Static React App)
+  - type: static
+    name: veilchat-client
+    env: static
+    region: oregon
+    plan: free
+    buildCommand: cd client && npm install && npm run build
+    publishDir: client/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://veilchat-server.onrender.com
+      - key: VITE_WS_URL
+        value: wss://veilchat-server.onrender.com

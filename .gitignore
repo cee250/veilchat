@@ -1,0 +1,45 @@
+```
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+coverage/
+.nyc_output/
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+
+# Logs
+*.log
+
+# Cache directories
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.vite/
+.temp/
+
+# Database migrations backup
+*.bak
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Patches and lock files (already tracked)
+# package-lock.json
+# pnpm-lock.yaml
+# patches/
+```
