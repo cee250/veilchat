@@ -48,10 +48,15 @@ export const messages = mysqlTable("messages", {
   id: int("id").autoincrement().primaryKey(),
   conversationId: int("conversationId").notNull(),
   senderId: int("senderId").notNull(),
+  recipientId: int("recipientId").notNull(),
   body: text("body").notNull(),
   senderDeleted: boolean("senderDeleted").default(false).notNull(),
   recipientDeleted: boolean("recipientDeleted").default(false).notNull(),
   expiresAt: timestamp("expiresAt"),
+  kind: mysqlEnum("kind", ["text", "image", "video"]).default("text").notNull(),
+  mediaUrl: text("mediaUrl"),
+  viewOnce: boolean("viewOnce").default(false).notNull(),
+  viewed: boolean("viewed").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({ conversationIdx: index("messages_conversation_idx").on(table.conversationId, table.createdAt) }));
 

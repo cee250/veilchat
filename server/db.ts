@@ -81,5 +81,12 @@ export async function getMessagesForConversation(conversationId: number, userId:
   if (!conversation[0]) return [];
   const now = new Date();
   const rows = await db.select().from(messages).where(and(eq(messages.conversationId, conversationId), or(isNull(messages.expiresAt), gt(messages.expiresAt, now)))).orderBy(messages.createdAt);
+  // Mark view-once media as viewed when fetched by recipient
+  for (const row of rows) {
+    if (row.recipientId === userId && row.viewOnce && !row.viewed) {
+      await db.update(messages).set({ viewed: true }).where(eq(messages.id, row.id));
+      row.viewed = true;
+    }
+  }
   return rows.filter((message) => !(message.senderId === userId ? message.senderDeleted : message.recipientDeleted));
 }

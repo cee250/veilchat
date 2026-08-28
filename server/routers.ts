@@ -69,11 +69,12 @@ export const appRouter = router({
   conversations: router({
     list: protectedProcedure.query(({ ctx }) => getConversationsForUser(ctx.user.id)),
     messages: protectedProcedure.input(z.object({ conversationId: z.number().int().positive() })).query(({ ctx, input }) => getMessagesForConversation(input.conversationId, ctx.user.id)),
-    send: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), body: z.string().min(1).max(10000), expiresAt: z.number().int().positive().optional() })).mutation(async ({ ctx, input }) => {
+    send: protectedProcedure.input(z.object({ conversationId: z.number().int().positive(), body: z.string().min(1).max(10000), expiresAt: z.number().int().positive().optional(), kind: z.enum(["text", "image", "video"]).default("text"), mediaUrl: z.string().url().optional().or(z.literal("")), viewOnce: z.boolean().default(false) })).mutation(async ({ ctx, input }) => {
       const db = await getDb(); if (!db) throw new Error("Database unavailable");
       const convo = await db.select().from(conversations).where(and(eq(conversations.id, input.conversationId), or(eq(conversations.participantAId, ctx.user.id), eq(conversations.participantBId, ctx.user.id)))).limit(1);
       if (!convo[0]) throw new Error("Conversation not found");
-      await db.insert(messages).values({ conversationId: input.conversationId, senderId: ctx.user.id, body: input.body.trim(), expiresAt: input.expiresAt ? new Date(input.expiresAt) : null });
+      const recipientId = convo[0].participantAId === ctx.user.id ? convo[0].participantBId : convo[0].participantAId;
+      await db.insert(messages).values({ conversationId: input.conversationId, senderId: ctx.user.id, recipientId, body: input.body.trim(), kind: input.kind, mediaUrl: input.mediaUrl || null, viewOnce: input.viewOnce, expiresAt: input.expiresAt ? new Date(input.expiresAt) : null });
       await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, input.conversationId));
       return { success: true } as const;
     }),
