@@ -129,6 +129,10 @@ export default function Home() {
   const shareLink = (typeof window === "undefined" ? "" : window.location.origin) + "/connect?username=" + encodeURIComponent(profileForm.username || "your-username");
   const shareMagicLink = async () => {
     // Simple invite link with username instead of complex signal
+    if (!profileForm.allowDiscovery) {
+      setRequestNotice("Enable 'Discoverable by username' in Settings first!");
+      return;
+    }
     const inviteUrl = `${window.location.origin}/connect?username=${encodeURIComponent(profileForm.username || user?.username || "")}`;
     try {
       await navigator.clipboard.writeText(inviteUrl);
