@@ -12,6 +12,7 @@ import {
   sendTemporaryMedia,
   consumeTemporaryMedia,
   setTemporaryTyping,
+  subscribeToRoomUpdates,
   validateAlias,
 } from "./temporaryRooms";
 
@@ -105,5 +106,36 @@ describe("temporary rooms", () => {
     expect(() => validateAlias("A")).toThrow();
     expect(() => validateAlias("email@example.com")).toThrow();
     expect(() => validateAlias("a".repeat(33))).toThrow();
+  });
+
+  it("subscribes to real-time room updates and receives instant broadcasts", () => {
+    const host = createTemporaryRoom("Host");
+    let updateCount = 0;
+    let latestSnap: any;
+    const unsub = subscribeToRoomUpdates(
+      host.roomId,
+      host.inviteToken,
+      host.currentMemberId,
+      (snap) => {
+        updateCount++;
+        latestSnap = snap;
+      },
+      () => {}
+    );
+    // Initial snapshot delivered immediately
+    expect(updateCount).toBe(1);
+    expect(latestSnap.hostAlias).toBe("Host");
+
+    // Guest joins -> triggers update
+    const guest = joinTemporaryRoom(host.roomId, host.inviteToken, "Guest");
+    expect(updateCount).toBe(2);
+    expect(latestSnap.participantCount).toBe(2);
+
+    // Guest sends message -> triggers update
+    sendTemporaryMessage(host.roomId, host.inviteToken, guest.currentMemberId, "realtime message");
+    expect(updateCount).toBe(3);
+    expect(latestSnap.messages[0]?.body).toBe("realtime message");
+
+    unsub();
   });
 });

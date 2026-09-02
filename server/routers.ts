@@ -33,8 +33,8 @@ export const appRouter = router({
     }),
   }),
   temporary: router({
-    create: publicProcedure.input(z.object({ alias: z.string() })).mutation(({ input }) =>
-      createTemporaryRoom(input.alias),
+    create: publicProcedure.input(z.object({ alias: z.string() })).mutation(({ ctx, input }) =>
+      createTemporaryRoom(input.alias, ctx.req.ip || "unknown"),
     ),
     join: publicProcedure.input(z.object({
       roomId: z.string(),

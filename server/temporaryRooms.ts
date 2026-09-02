@@ -61,6 +61,83 @@ export type RoomSnapshot = {
 
 const rooms = new Map<string, Room>();
 
+type Subscriber = {
+  memberId: string;
+  onUpdate: (snapshot: RoomSnapshot) => void;
+  onClose: (reason: string) => void;
+};
+
+const subscribers = new Map<string, Set<Subscriber>>();
+
+// In-memory sliding-window rate limiter
+const rateLimitMap = new Map<string, number[]>();
+
+export function checkRateLimit(key: string, maxHits = 20, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const timestamps = (rateLimitMap.get(key) || []).filter((time) => now - time < windowMs);
+  if (timestamps.length >= maxHits) {
+    return false;
+  }
+  timestamps.push(now);
+  rateLimitMap.set(key, timestamps);
+  return true;
+}
+
+export function notifyRoomSubscribers(roomId: string, closedReason?: string) {
+  const roomSubs = subscribers.get(roomId);
+  if (!roomSubs || roomSubs.size === 0) return;
+  const room = rooms.get(roomId);
+  if (!room || closedReason) {
+    roomSubs.forEach((sub) => {
+      try {
+        sub.onClose(closedReason || "Room ended or expired.");
+      } catch {
+        /* ignore */
+      }
+    });
+    subscribers.delete(roomId);
+    return;
+  }
+  roomSubs.forEach((sub) => {
+    try {
+      const snap = snapshot(room, sub.memberId);
+      sub.onUpdate(snap);
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+export function subscribeToRoomUpdates(
+  roomId: string,
+  inviteToken: string,
+  memberId: string,
+  onUpdate: (snapshot: RoomSnapshot) => void,
+  onClose: (reason: string) => void
+): () => void {
+  const room = requireRoom(roomId, inviteToken);
+  // Verify member
+  if (room.host.id !== memberId && room.guest?.id !== memberId) {
+    throw new Error("You are not a participant in this room.");
+  }
+  if (!subscribers.has(roomId)) {
+    subscribers.set(roomId, new Set());
+  }
+  const sub: Subscriber = { memberId, onUpdate, onClose };
+  subscribers.get(roomId)!.add(sub);
+
+  // Send initial snapshot immediately
+  onUpdate(snapshot(room, memberId));
+
+  return () => {
+    const subs = subscribers.get(roomId);
+    if (subs) {
+      subs.delete(sub);
+      if (subs.size === 0) subscribers.delete(roomId);
+    }
+  };
+}
+
 export function validateAlias(alias: string) {
   const normalized = alias.trim();
   if (!/^[A-Za-z0-9 ._-]{2,32}$/.test(normalized)) {
@@ -71,7 +148,10 @@ export function validateAlias(alias: string) {
 
 function removeExpiredRooms(now = Date.now()) {
   rooms.forEach((room, roomId) => {
-    if (room.expiresAt <= now) rooms.delete(roomId);
+    if (room.expiresAt <= now) {
+      notifyRoomSubscribers(roomId, "Room has expired.");
+      rooms.delete(roomId);
+    }
   });
 }
 
@@ -107,8 +187,11 @@ function snapshot(room: Room, currentMemberId: string): RoomSnapshot {
   };
 }
 
-export function createTemporaryRoom(aliasInput: string) {
+export function createTemporaryRoom(aliasInput: string, clientIp = "default") {
   removeExpiredRooms();
+  if (!checkRateLimit(`create:${clientIp}`, 15, 60_000)) {
+    throw new Error("Too many room creation requests. Please wait a minute.");
+  }
   const alias = validateAlias(aliasInput);
   const room: Room = {
     id: nanoid(16),
@@ -130,7 +213,9 @@ export function joinTemporaryRoom(roomId: string, inviteToken: string, aliasInpu
   if (room.guest) throw new Error("This temporary room already has two participants.");
   const alias = validateAlias(aliasInput);
   room.guest = { id: nanoid(12), alias };
-  return snapshot(room, room.guest.id);
+  const snap = snapshot(room, room.guest.id);
+  notifyRoomSubscribers(roomId);
+  return snap;
 }
 
 export function getTemporaryRoom(roomId: string, inviteToken: string, memberId: string) {
@@ -143,7 +228,9 @@ export function setTemporaryTyping(roomId: string, inviteToken: string, memberId
     throw new Error("You are not a participant in this room.");
   }
   room.typing = isTyping ? { memberId, expiresAt: Date.now() + 6_000 } : undefined;
-  return snapshot(room, memberId);
+  const snap = snapshot(room, memberId);
+  notifyRoomSubscribers(roomId);
+  return snap;
 }
 
 export function acknowledgeTemporaryMessages(roomId: string, inviteToken: string, memberId: string) {
@@ -151,10 +238,16 @@ export function acknowledgeTemporaryMessages(roomId: string, inviteToken: string
   if (room.host.id !== memberId && room.guest?.id !== memberId) {
     throw new Error("You are not a participant in this room.");
   }
+  let changed = false;
   room.messages.forEach((message) => {
-    if (message.memberId !== memberId) message.deliveredBy = memberId;
+    if (message.memberId !== memberId && !message.deliveredBy) {
+      message.deliveredBy = memberId;
+      changed = true;
+    }
   });
-  return snapshot(room, memberId);
+  const snap = snapshot(room, memberId);
+  if (changed) notifyRoomSubscribers(roomId);
+  return snap;
 }
 
 export function markTemporaryMessagesRead(roomId: string, inviteToken: string, memberId: string, messageIds: string[] = []) {
@@ -163,10 +256,16 @@ export function markTemporaryMessagesRead(roomId: string, inviteToken: string, m
     throw new Error("You are not a participant in this room.");
   }
   const targetIds = new Set(messageIds);
+  let changed = false;
   room.messages.forEach((message) => {
-    if (message.memberId !== memberId && (targetIds.size === 0 || targetIds.has(message.id))) message.readBy = memberId;
+    if (message.memberId !== memberId && !message.readBy && (targetIds.size === 0 || targetIds.has(message.id))) {
+      message.readBy = memberId;
+      changed = true;
+    }
   });
-  return snapshot(room, memberId);
+  const snap = snapshot(room, memberId);
+  if (changed) notifyRoomSubscribers(roomId);
+  return snap;
 }
 
 export function sendTemporaryMessage(roomId: string, inviteToken: string, memberId: string, bodyInput: string) {
@@ -177,7 +276,9 @@ export function sendTemporaryMessage(roomId: string, inviteToken: string, member
   if (!body || body.length > MAX_MESSAGE_LENGTH) throw new Error("Message must contain 1–2,000 characters.");
   room.typing = undefined;
   room.messages.push({ id: nanoid(12), memberId, alias: member.alias, body, sentAt: Date.now() });
-  return snapshot(room, memberId);
+  const snap = snapshot(room, memberId);
+  notifyRoomSubscribers(roomId);
+  return snap;
 }
 
 function getParticipant(room: Room, memberId: string) {
@@ -187,7 +288,7 @@ function getParticipant(room: Room, memberId: string) {
 }
 
 function validateMedia(kind: "voice" | "photo", dataUrlInput: string) {
-  const match = dataUrlInput.match(/^data:(audio\/(?:webm|ogg|mp4)|image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  const match = dataUrlInput.match(/^data:(audio\/(?:webm|ogg|mp4|wav|aac)|image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new Error("Unsupported media format.");
   const isVoice = match[1].startsWith("audio/");
   if ((kind === "voice") !== isVoice) throw new Error("Media type does not match the selected action.");
@@ -202,7 +303,9 @@ export function sendTemporaryMedia(roomId: string, inviteToken: string, memberId
   const member = getParticipant(room, memberId);
   const dataUrl = validateMedia(kind, dataUrlInput);
   room.media.push({ id: nanoid(12), memberId, alias: member.alias, kind, dataUrl, sentAt: Date.now() });
-  return snapshot(room, memberId);
+  const snap = snapshot(room, memberId);
+  notifyRoomSubscribers(roomId);
+  return snap;
 }
 
 export function consumeTemporaryMedia(roomId: string, inviteToken: string, memberId: string, mediaId: string) {
@@ -213,7 +316,9 @@ export function consumeTemporaryMedia(roomId: string, inviteToken: string, membe
   if (item.memberId === memberId) throw new Error("Only the recipient can consume this media.");
   if (item.consumedBy) throw new Error("This media is no longer available.");
   item.consumedBy = memberId;
-  return snapshot(room, memberId);
+  const snap = snapshot(room, memberId);
+  notifyRoomSubscribers(roomId);
+  return snap;
 }
 
 export function leaveTemporaryRoom(roomId: string, inviteToken: string, memberId: string) {
@@ -221,12 +326,15 @@ export function leaveTemporaryRoom(roomId: string, inviteToken: string, memberId
   if (room.host.id !== memberId && room.guest?.id !== memberId) {
     throw new Error("You are not a participant in this room.");
   }
+  notifyRoomSubscribers(roomId, "A participant left the room.");
   rooms.delete(roomId);
   return { success: true as const };
 }
 
 export function clearTemporaryRoomsForTests() {
   rooms.clear();
+  subscribers.clear();
+  rateLimitMap.clear();
 }
 
 export function roomCountForTests() {
