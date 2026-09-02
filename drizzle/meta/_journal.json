@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1788035824564,
+      "tag": "0000_hesitant_charles_xavier",
+      "breakpoints": true
+    }
+  ]
+}
